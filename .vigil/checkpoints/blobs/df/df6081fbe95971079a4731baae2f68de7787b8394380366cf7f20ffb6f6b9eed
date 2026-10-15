@@ -1,0 +1,125 @@
+// IPC layer. Talks to the Tauri Rust backend when present; in a plain
+// browser (dev preview without cargo) it serves an in-memory demo
+// backend so the whole staged-edit pipeline still works end to end.
+
+import type { ApplyResult, FileMeta, WriteResult, ConfigFormat } from "./types";
+
+interface TauriWindow {
+  __TAURI_INTERNALS__?: {
+    invoke: <T>(cmd: string, args?: unknown) => Promise<T>;
+  };
+}
+
+const tw = window as unknown as TauriWindow;
+const hasBackend = Boolean(tw.__TAURI_INTERNALS__);
+export const isDemoMode = !hasBackend;
+
+// Demo corpus: a realistic mid-size i3 config exercising the parser.
+const DEMO_I3 = `# i3 config (v4)
+# managed with Heffs-i3-toolkit
+
+font pango:JetBrains Mono 9
+
+# gaps
+gaps inner 10
+gaps outer 4
+
+default_border pixel 2
+
+# autostart
+exec --no-startup-id nm-applet
+exec --no-startup-id dunst
+exec_always --no-startup-id picom --config ~/.config/picom/picom.conf
+# exec --no-startup-id flameshot
+
+# window focus
+bindsym $mod+j focus left
+bindsym $mod+k focus down
+bindsym $mod+l focus up
+bindsym $mod+semicolon focus right
+
+# movement
+bindsym $mod+Shift+j move left
+bindsym $mod+Shift+k move down
+bindsym $mod+Shift+l move up
+bindsym $mod+Shift+semicolon move right
+
+bindsym $mod+Return exec alacritty
+bindsym $mod+d exec rofi -show drun
+bindsym $mod+Shift+q kill
+bindsym $mod+f fullscreen toggle
+bindsym $mod+space focus mode_toggle
+bindsym $mod+Shift+c reload
+bindsym $mod+Shift+r restart
+bindsym $mod+Shift+e exec "i3-nagbar -t warning -m 'Exit i3?' -B 'Exit' 'i3-msg exit'"
+
+mode "resize" {
+    bindsym j resize shrink width 10 px or 10 ppt
+    bindsym k resize grow height 10 px or 10 ppt
+    bindsym l resize shrink height 10 px or 10 ppt
+    bindsym semicolon resize grow width 10 px or 10 ppt
+    bindsym Escape mode "default"
+}
+`;
+
+const demoFiles = new Map<string, { content: string; mtime: string }>([
+  ["~/.config/i3/config", { content: DEMO_I3, mtime: new Date().toISOString() }],
+]);
+
+function demoMeta(path: string): FileMeta {
+  const f = demoFiles.get(path);
+  return {
+    path,
+    format: "i3",
+    exists: Boolean(f),
+    lastModified: f?.mtime ?? null,
+    sizeBytes: f ? f.content.length : null,
+  };
+}
+
+export async function readFileMeta(path: string): Promise<FileMeta> {
+  if (hasBackend) {
+    return tw.__TAURI_INTERNALS__!.invoke<FileMeta>("file_meta", { path });
+  }
+  return demoMeta(path);
+}
+
+export async function readConfig(path: string): Promise<string> {
+  if (hasBackend) {
+    return tw.__TAURI_INTERNALS__!.invoke<string>("read_config", { path });
+  }
+  return demoFiles.get(path)?.content ?? "";
+}
+
+// The safety rail: backup + atomic write, done backend-side.
+export async function writeConfig(args: {
+  path: string;
+  content: string;
+  format: ConfigFormat;
+}): Promise<WriteResult> {
+  if (hasBackend) {
+    return tw.__TAURI_INTERNALS__!.invoke<WriteResult>("write_config", args);
+  }
+  const prev = demoFiles.get(args.path);
+  const now = new Date().toISOString();
+  demoFiles.set(args.path, { content: args.content, mtime: now });
+  return {
+    ok: true,
+    backupPath: prev
+      ? `~/.config/heffs-i3-toolkit/backups/demo-${now.replace(/[:.]/g, "-")}.bak`
+      : null,
+    error: null,
+  };
+}
+
+export async function applyTool(target: string, path: string): Promise<ApplyResult> {
+  if (hasBackend) {
+    return tw.__TAURI_INTERNALS__!.invoke<ApplyResult>("apply_tool", { target, path });
+  }
+  return {
+    ok: true,
+    message: `Demo mode: ${target} apply skipped (no backend).`,
+    commandRun: `i3-msg reload (${target})`,
+    commandOutput: null,
+  };
+}

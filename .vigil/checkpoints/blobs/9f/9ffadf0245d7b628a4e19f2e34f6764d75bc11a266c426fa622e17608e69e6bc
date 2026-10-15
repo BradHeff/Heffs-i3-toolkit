@@ -1,0 +1,250 @@
+// Heffs i3 toolkit — Tauri 2 backend.
+// Safety-rail write pipeline: backup -> atomic write -> (optional) apply.
+// Nothing in this backend ever writes without making a timestamped backup
+// first, and writes go to a temp file in the same directory followed by a
+// rename, so a crash can never leave a truncated config.
+
+use serde::Serialize;
+use std::fs;
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::time::SystemTime;
+
+#[derive(Serialize)]
+pub struct FileMeta {
+    pub path: String,
+    pub format: String,
+    pub exists: bool,
+    pub last_modified: Option<String>,
+    pub size_bytes: Option<u64>,
+}
+
+#[derive(Serialize)]
+pub struct WriteResult {
+    pub ok: bool,
+    pub backup_path: Option<String>,
+    pub error: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct ApplyResult {
+    pub ok: bool,
+    pub message: String,
+    command_run: Option<String>,
+    command_output: Option<String>,
+}
+
+/// Expand a leading `~` using $HOME.
+fn expand_tilde(path: &str) -> PathBuf {
+    if let Some(rest) = path.strip_prefix("~/") {
+        if let Some(home) = dirs::home_dir() {
+            return home.join(rest);
+        }
+    }
+    PathBuf::from(path)
+}
+
+/// Timestamped backup directory for all targets.
+fn backup_dir() -> PathBuf {
+    let base = dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".config")
+        .join("heffs-i3-toolkit")
+        .join("backups");
+    let _ = fs::create_dir_all(&base);
+    base
+}
+
+/// `20261015-162200` style stamp from the wall clock.
+fn timestamp() -> String {
+    let now = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap_or_default();
+    let secs = now.as_secs() as i64;
+    // Civil-time conversion (days -> y/m/d) without pulling in a full
+    // chrono dependency for this one function.
+    let days = secs.div_euclid(86400);
+    let secs_of_day = secs.rem_euclid(86400);
+    let (y, m, d) = civil_from_days(days);
+    format!(
+        "{:04}{:02}{:02}-{:02}{:02}{:02}",
+        y,
+        m,
+        d,
+        secs_of_day / 3600,
+        (secs_of_day % 3600) / 60,
+        secs_of_day % 60
+    )
+}
+
+/// Howard Hinnant's days-to-civil algorithm.
+fn civil_from_days(z: i64) -> (i64, u32, u32) {
+    let z = z + 719468;
+    let era = z.div_euclid(146097);
+    let doe = z.rem_euclid(146097);
+    let yoe = (doe - doe / 1460 - doe / 36524 + doe / 146096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
+    (if m <= 2 { y + 1 } else { y }, m, d)
+}
+
+#[tauri::command]
+fn file_meta(path: String) -> Result<FileMeta, String> {
+    let p = expand_tilde(&path);
+    match fs::metadata(&p) {
+        Ok(md) => {
+            let mtime = md
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
+                .map(|d| format_rfc3339(d.as_secs() as i64));
+            Ok(FileMeta {
+                path: path.clone(),
+                format: format_for(&p),
+                exists: true,
+                last_modified: mtime,
+                size_bytes: Some(md.len()),
+            })
+        }
+        Err(_) => Ok(FileMeta {
+            path,
+            format: format_for(&p),
+            exists: false,
+            last_modified: None,
+            size_bytes: None,
+        }),
+    }
+}
+
+fn format_for(path: &Path) -> String {
+    match path.extension().and_then(|e| e.to_str()) {
+        Some("conf") => "conf".into(),
+        Some("ini") => "ini".into(),
+        Some("rasi") => "rasi".into(),
+        Some("sh") => "shell".into(),
+        _ => {
+            if path.to_string_lossy().contains("i3") {
+                "i3".into()
+            } else {
+                "conf".into()
+            }
+        }
+    }
+}
+
+/// Format epoch seconds as RFC 3339 (UTC). civil_from_days does the date.
+fn format_rfc3339(epoch: i64) -> String {
+    let days = epoch.div_euclid(86400);
+    let secs = epoch.rem_euclid(86400);
+    let (y, m, d) = civil_from_days(days);
+    format!(
+        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
+        y,
+        m,
+        d,
+        secs / 3600,
+        (secs % 3600) / 60,
+        secs % 60
+    )
+}
+
+#[tauri::command]
+fn read_config(path: String) -> Result<String, String> {
+    let p = expand_tilde(&path);
+    fs::read_to_string(&p).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn write_config(path: String, content: String, _format: String) -> Result<WriteResult, String> {
+    let p = expand_tilde(&path);
+    let parent = p
+        .parent()
+        .ok_or_else(|| "invalid path: no parent directory".to_string())?;
+    fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+
+    // 1. Backup: copy the existing file, if any.
+    let mut backup_path: Option<String> = None;
+    if p.exists() {
+        let file_name = p
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("config");
+        let bak = backup_dir().join(format!("{}-{}.bak", timestamp(), file_name));
+        fs::copy(&p, &bak).map_err(|e| format!("backup failed: {}", e))?;
+        backup_path = Some(bak.to_string_lossy().into_owned());
+    }
+
+    // 2. Atomic write: temp file in the same directory, then rename.
+    let file_name = p.file_name().and_then(|n| n.to_str()).unwrap_or("config");
+    let tmp = parent.join(format!(".{}.heffs-tmp", file_name));
+    {
+        let mut f = fs::File::create(&tmp).map_err(|e| e.to_string())?;
+        f.write_all(content.as_bytes())
+            .and_then(|_| f.sync_all())
+            .map_err(|e| {
+                let _ = fs::remove_file(&tmp);
+                e.to_string()
+            })?;
+    }
+    fs::rename(&tmp, &p).map_err(|e| {
+        let _ = fs::remove_file(&tmp);
+        e.to_string()
+    })?;
+
+    Ok(WriteResult {
+        ok: true,
+        backup_path,
+        error: None,
+    })
+}
+
+#[tauri::command]
+fn apply_tool(target: String, _path: String) -> Result<ApplyResult, String> {
+    let (program, args) = match target.as_str() {
+        "i3" => ("i3-msg", vec!["reload"]),
+        "polybar" => ("polybar-msg", vec!["cmd", "restart"]),
+        "dunst" => ("dunstify", vec!["-C"]), // clear notifications so the new theme shows
+        "picom" => ("picom-msg", vec!["--restart"]), // if present; else fail soft
+        _ => {
+            return Ok(ApplyResult {
+                ok: true,
+                message: format!("{} has no live-reload command; changes take effect next start.", target),
+                command_run: None,
+                command_output: None,
+            });
+        }
+    };
+
+    let display = Command::new(program)
+        .args(&args)
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    Ok(ApplyResult {
+        ok: display.status.success(),
+        message: if display.status.success() {
+            format!("{} applied ({} {}).", target, program, args.join(" "))
+        } else {
+            format!("{} failed to apply.", target)
+        },
+        command_run: Some(format!("{} {}", program, args.join(" "))),
+        command_output: Some(String::from_utf8_lossy(&display.stdout).into_owned()),
+    })
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![
+            file_meta,
+            read_config,
+            write_config,
+            apply_tool
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}

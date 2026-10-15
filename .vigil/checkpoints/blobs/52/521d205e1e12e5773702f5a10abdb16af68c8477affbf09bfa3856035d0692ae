@@ -1,0 +1,98 @@
+// App shell — tab navigation across the config targets. M0 ships the i3
+// tab; other tabs are honest placeholders naming their milestone.
+
+import { useState } from "react";
+import { Box, Paper, Tab, Tabs, Typography } from "@mui/material";
+import I3Tab from "./components/I3Tab";
+import { isDemoMode } from "./ipc";
+
+interface TabSpec {
+  key: string;
+  label: string;
+  milestone: string;
+}
+
+const TABS: TabSpec[] = [
+  { key: "i3", label: "i3", milestone: "now" },
+  { key: "polybar", label: "Polybar", milestone: "M1" },
+  { key: "lock", label: "i3lock", milestone: "M2" },
+  { key: "rofi", label: "rofi", milestone: "M3" },
+  { key: "greeter", label: "Greeter", milestone: "M3" },
+  { key: "extras", label: "Extras", milestone: "backlog" },
+];
+
+export default function App() {
+  const [active, setActive] = useState("i3");
+
+  return (
+    <Box sx={{ height: "100vh", display: "flex", flexDirection: "column" }}>
+      <Box
+        component="header"
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          gap: 1.5,
+          px: 2,
+          py: 1,
+          borderBottom: "1px solid",
+          borderColor: "divider",
+          bgcolor: "background.paper",
+        }}
+      >
+        <Box
+          component="img"
+          src="/heffs-i3-toolkit.svg"
+          alt="Heffs i3 toolkit logo"
+          sx={{ width: 22, height: 22 }}
+        />
+        <Typography variant="h2" sx={{ fontSize: "1rem" }}>
+          Heffs i3 toolkit
+        </Typography>
+        {isDemoMode && (
+          <Typography
+            variant="caption"
+            sx={{
+              ml: "auto",
+              fontFamily: '"JetBrains Mono", monospace',
+              color: "warning.main",
+            }}
+          >
+            demo mode (no backend)
+          </Typography>
+        )}
+      </Box>
+
+      <Tabs value={active} onChange={(_e, v: string) => setActive(v)}>
+        {TABS.map((t) => (
+          <Tab key={t.key} value={t.key} label={t.label} />
+        ))}
+      </Tabs>
+
+      <Box component="main" sx={{ flexGrow: 1, overflow: "auto", minHeight: 0 }}>
+        {active === "i3" ? (
+          <I3Tab />
+        ) : (
+          <ComingSoonTab milestone={TABS.find((t) => t.key === active)?.milestone ?? ""} />
+        )}
+      </Box>
+    </Box>
+  );
+}
+
+function ComingSoonTab(props: { milestone: string }) {
+  return (
+    <Box sx={{ p: 4, display: "grid", placeItems: "center" }}>
+      <Paper sx={{ px: 4, py: 3 }}>
+        <Typography variant="h3" gutterBottom>
+          Coming in {props.milestone}
+        </Typography>
+        <Typography variant="body2" sx={{ color: "text.secondary", maxWidth: 480 }}>
+          This tab will land in a later milestone of the roadmap. The i3 tab is
+          the working editor today; every tab will follow the same pattern:
+          file locator header, staged edits, diff preview, backup, atomic
+          write, apply.
+        </Typography>
+      </Paper>
+    </Box>
+  );
+}

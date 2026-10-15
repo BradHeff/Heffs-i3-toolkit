@@ -1,0 +1,229 @@
+import { createTheme } from "@mui/material/styles";
+
+// Signal teal ramp (primary). One working hue, WCAG AA against the ink ramp.
+const teal = {
+  50: "#E6FBF7",
+  100: "#C2F4EB",
+  200: "#8FE9DA",
+  300: "#5CDCC8",
+  400: "#35CBB4",
+  500: "#17B39D",
+  600: "#0E9280",
+  700: "#0C7466",
+  800: "#0B5B51",
+  900: "#094B43",
+};
+
+// Cool-grey neutrals; deliberately not MUI's blue-tinted grey.
+const grey = {
+  50: "#E9EDF1",
+  100: "#D2D9E0",
+  200: "#B4BFC9",
+  300: "#93A1AE",
+  400: "#71808F",
+  500: "#566472",
+  600: "#414D59",
+  700: "#313B45",
+  800: "#232B33",
+  900: "#161B21",
+};
+
+// Ink surface ramp, near-black, no pure black (crushes on cheap panels).
+const ink = {
+  base: "#0B0E11",
+  low: "#101419",
+  mid: "#141A20",
+  high: "#1A222A",
+  line: "#2A343E",
+};
+
+// Ember amber: warning / unsaved-changes accent.
+const ember = {
+  main: "#E8A33D",
+  dark: "#B87A1E",
+  dim: "#6B4A15",
+};
+
+export const surfaces = ink;
+
+const theme = createTheme({
+  palette: {
+    mode: "dark",
+    primary: { main: teal[500], light: teal[300], dark: teal[700] },
+    secondary: { main: ember.main, light: "#F2C274", dark: ember.dark },
+    error: { main: "#E5534B" },
+    success: { main: teal[400] },
+    warning: { main: ember.main },
+    info: { main: teal[300] },
+    background: { default: ink.base, paper: ink.low },
+    divider: ink.line,
+    text: { primary: grey[50], secondary: grey[300], disabled: grey[600] },
+    grey,
+  },
+  typography: {
+    fontFamily: '"Space Grotesk", "Segoe UI", sans-serif',
+    h1: { fontSize: "1.75rem", fontWeight: 600, letterSpacing: "-0.01em" },
+    h2: { fontSize: "1.375rem", fontWeight: 600, letterSpacing: "-0.01em" },
+    h3: { fontSize: "1.125rem", fontWeight: 600 },
+    h4: { fontSize: "1rem", fontWeight: 600 },
+    body1: { fontSize: "0.875rem", lineHeight: 1.55 },
+    body2: { fontSize: "0.8125rem", lineHeight: 1.5 },
+    caption: { fontSize: "0.6875rem" },
+    button: {
+      textTransform: "none" as const,
+      fontWeight: 500,
+      fontSize: "0.8125rem",
+    },
+  },
+  shape: { borderRadius: 2 },
+  spacing: 4,
+  components: {
+    MuiCssBaseline: {
+      styleOverrides: {
+        body: { backgroundColor: ink.base },
+        "::selection": { background: teal[800], color: grey[50] },
+      },
+    },
+    MuiPaper: {
+      defaultProps: { elevation: 0 },
+      styleOverrides: {
+        root: {
+          backgroundImage: "none",
+          border: `1px solid ${ink.line}`,
+        },
+        outlined: { borderColor: ink.line },
+      },
+    },
+    MuiCard: {
+      styleOverrides: {
+        root: {
+          backgroundColor: ink.low,
+          borderRadius: 8,
+          border: `1px solid ${ink.line}`,
+        },
+      },
+    },
+    MuiButton: {
+      defaultProps: { disableElevation: true, size: "small" },
+      styleOverrides: {
+        root: { borderRadius: 2, paddingInline: 14 },
+        containedPrimary: {
+          "&:hover": { backgroundColor: teal[600] },
+        },
+        outlined: {
+          borderColor: ink.line,
+          "&:hover": { borderColor: grey[600], backgroundColor: ink.mid },
+        },
+      },
+    },
+    MuiChip: {
+      styleOverrides: {
+        root: {
+          borderRadius: 2,
+          fontFamily: '"JetBrains Mono", monospace',
+          fontSize: "0.6875rem",
+          height: 22,
+          letterSpacing: "0.04em",
+        },
+        outlined: { borderColor: ink.line },
+      },
+    },
+    MuiTextField: {
+      defaultProps: { size: "small" },
+    },
+    MuiOutlinedInput: {
+      styleOverrides: {
+        root: {
+          borderRadius: 2,
+          backgroundColor: ink.base,
+          "& fieldset": { borderColor: ink.line },
+          "&:hover fieldset": { borderColor: grey[600] },
+          "&.Mui-focused fieldset": { borderColor: teal[500] },
+        },
+        input: { padding: "7px 10px" },
+      },
+    },
+    MuiInputLabel: {
+      styleOverrides: {
+        root: { fontSize: "0.8125rem", "&.Mui-focused": { color: teal[400] } },
+      },
+    },
+    MuiTabs: {
+      styleOverrides: {
+        root: { minHeight: 40, borderBottom: `1px solid ${ink.line}` },
+        indicator: { backgroundColor: teal[500], height: 2 },
+      },
+    },
+    MuiTab: {
+      styleOverrides: {
+        root: {
+          minHeight: 40,
+          textTransform: "none",
+          fontWeight: 500,
+          fontSize: "0.8125rem",
+          color: grey[400],
+          "&.Mui-selected": { color: teal[300] },
+        },
+      },
+    },
+    MuiTooltip: {
+      styleOverrides: {
+        tooltip: {
+          backgroundColor: ink.high,
+          border: `1px solid ${ink.line}`,
+          fontSize: "0.6875rem",
+          borderRadius: 2,
+        },
+      },
+    },
+    MuiDialog: {
+      styleOverrides: {
+        paper: {
+          backgroundColor: ink.low,
+          border: `1px solid ${ink.line}`,
+          // Shadows reserved for floating elements only.
+          boxShadow: "0 12px 40px rgba(0,0,0,0.55)",
+        },
+      },
+    },
+    MuiSnackbarContent: {
+      styleOverrides: {
+        root: {
+          backgroundColor: ink.high,
+          border: `1px solid ${ink.line}`,
+          boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+          fontFamily: '"JetBrains Mono", monospace',
+          fontSize: "0.75rem",
+        },
+      },
+    },
+    MuiSwitch: {
+      styleOverrides: {
+        root: { width: 34, height: 20 },
+        switchBase: { padding: 3 },
+        thumb: { width: 14, height: 14 },
+        track: { borderRadius: 2, backgroundColor: grey[700] },
+      },
+    },
+    MuiTableCell: {
+      styleOverrides: {
+        root: {
+          borderColor: ink.line,
+          fontSize: "0.8125rem",
+          padding: "6px 10px",
+        },
+        head: {
+          fontFamily: '"JetBrains Mono", monospace',
+          fontSize: "0.6875rem",
+          textTransform: "uppercase",
+          letterSpacing: "0.08em",
+          color: grey[400],
+          fontWeight: 500,
+        },
+      },
+    },
+  },
+});
+
+export default theme;
+export { teal, ember, grey, ink };
