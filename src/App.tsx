@@ -1,7 +1,7 @@
 // App shell — tab navigation across the config targets. All six config
 // editors now run on the same staged-edit pipeline.
 
-import { useState } from "react";
+import React, { useState } from "react";
 import { Box, Tab, Tabs, Typography } from "@mui/material";
 import I3Tab from "./components/I3Tab";
 import PolybarTab from "./components/PolybarTab";
@@ -26,6 +26,20 @@ const TABS: TabSpec[] = [
   { key: "picom", label: "picom" },
   { key: "greeter", label: "Greeter" },
 ];
+
+// Tabs stay mounted (hidden, not unmounted) so staged edits survive
+// switching tabs. Elements are created once at module level: mounting
+// real children (never calling components as functions) keeps each
+// tab's hooks on its own component instance.
+const TAB_ELEMENTS: Record<string, React.ReactElement> = {
+  i3: <I3Tab />,
+  polybar: <PolybarTab />,
+  lock: <LockTab />,
+  rofi: <RofiTab />,
+  dunst: <DunstTab />,
+  picom: <PicomTab />,
+  greeter: <GreeterTab />,
+};
 
 export default function App() {
   const [active, setActive] = useState("i3");
@@ -68,20 +82,36 @@ export default function App() {
         )}
       </Box>
 
-      <Tabs value={active} onChange={(_e, v: string) => setActive(v)}>
+      <Tabs
+        value={active}
+        onChange={(_e, v: string) => setActive(v)}
+        aria-label="Config target"
+      >
         {TABS.map((t) => (
-          <Tab key={t.key} value={t.key} label={t.label} />
+          <Tab
+            key={t.key}
+            value={t.key}
+            label={t.label}
+            id={`config-tab-${t.key}`}
+            aria-controls={`config-tabpanel-${t.key}`}
+          />
         ))}
       </Tabs>
 
       <Box component="main" sx={{ flexGrow: 1, overflow: "auto", minHeight: 0 }}>
-        {active === "i3" && <I3Tab />}
-        {active === "polybar" && <PolybarTab />}
-        {active === "lock" && <LockTab />}
-        {active === "rofi" && <RofiTab />}
-        {active === "dunst" && <DunstTab />}
-        {active === "picom" && <PicomTab />}
-        {active === "greeter" && <GreeterTab />}
+        {TABS.map((t) => (
+          <Box
+            key={t.key}
+            role="tabpanel"
+            id={`config-tabpanel-${t.key}`}
+            aria-labelledby={`config-tab-${t.key}`}
+            hidden={active !== t.key}
+            {...(active !== t.key ? { inert: true } : {})}
+            sx={{ height: "100%", overflow: "auto" }}
+          >
+            {TAB_ELEMENTS[t.key]}
+          </Box>
+        ))}
       </Box>
     </Box>
   );

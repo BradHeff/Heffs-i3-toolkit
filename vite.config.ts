@@ -7,6 +7,16 @@ const host = process.env.TAURI_DEV_HOST;
 export default defineConfig(async () => ({
   plugins: [react()],
   clearScreen: false,
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          react: ["react", "react-dom"],
+          mui: ["@mui/material", "@emotion/react", "@emotion/styled"],
+        },
+      },
+    },
+  },
   server: {
     port: 5173,
     strictPort: true,

@@ -27,6 +27,7 @@ import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/DeleteOutline";
 import FileLocatorHeader from "./FileLocatorHeader";
 import DiffDialog from "./DiffDialog";
+import NumberField from "./NumberField";
 import { findKeyConflicts, parseI3, serializeI3, validateI3 } from "../adapters/i3";
 import type { I3File } from "../adapters/i3";
 import { diffLines } from "../lib/diff";
@@ -44,6 +45,7 @@ interface Snack {
 export default function I3Tab() {
   const [path, setPath] = useState(I3_DEFAULT_PATH);
   const [refreshKey, setRefreshKey] = useState(0);
+  const reload = useCallback(() => setRefreshKey((k) => k + 1), []);
   const [file, setFile] = useState<I3File | null>(null);
   const [original, setOriginal] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -144,6 +146,22 @@ export default function I3Tab() {
     );
   }, []);
 
+  const addStartup = useCallback(() => {
+    setFile((f) => {
+      if (!f) return f;
+      const e: I3StartupApp = {
+        id: `ui-${Date.now()}`,
+        kind: "exec",
+        command: "",
+        note: "",
+        enabled: true,
+        raw: "",
+        noStartupId: false,
+      };
+      return { ...f, model: { ...f.model, startup: [...f.model.startup, e] } };
+    });
+  }, []);
+
   const updateAppearance = useCallback(
     (patch: Partial<I3File["model"]["appearance"]>) => {
       setFile((f) =>
@@ -222,6 +240,7 @@ export default function I3Tab() {
         path={path}
         onPathChange={setPath}
         refreshKey={refreshKey}
+        onExternalChange={dirty ? undefined : reload}
       />
 
       <Box
@@ -280,7 +299,14 @@ export default function I3Tab() {
 
           <Paper sx={{ p: 0, overflow: "hidden" }}>
             <Box sx={{ px: 2, pt: 1.5 }}>
-              <SectionTitle title="Startup apps" />
+              <SectionTitle
+                title="Startup apps"
+                action={
+                  <Button startIcon={<AddIcon />} onClick={addStartup} size="small">
+                    Add
+                  </Button>
+                }
+              />
             </Box>
             <TableContainer sx={{ maxHeight: 260 }}>
               <Table stickyHeader size="small" aria-label="Startup apps">
@@ -312,28 +338,28 @@ export default function I3Tab() {
           <Paper sx={{ p: 2 }}>
             <SectionTitle title="Appearance" />
             <Box sx={{ display: "grid", gap: 1.5 }}>
-              <TextField
+              <NumberField
                 label="Gaps inner (px)"
-                type="number"
+                min={0}
                 value={file.model.appearance.gapsInner}
-                onChange={(e) => updateAppearance({ gapsInner: Number(e.target.value) })}
+                onChange={(v) => updateAppearance({ gapsInner: v })}
               />
-              <TextField
+              <NumberField
                 label="Gaps outer (px)"
-                type="number"
+                min={0}
                 value={file.model.appearance.gapsOuter}
-                onChange={(e) => updateAppearance({ gapsOuter: Number(e.target.value) })}
+                onChange={(v) => updateAppearance({ gapsOuter: v })}
               />
               <TextField
                 label="Font"
                 value={file.model.appearance.font}
                 onChange={(e) => updateAppearance({ font: e.target.value })}
               />
-              <TextField
+              <NumberField
                 label="Border width (px)"
-                type="number"
+                min={0}
                 value={file.model.appearance.borderWidth}
-                onChange={(e) => updateAppearance({ borderWidth: Number(e.target.value) })}
+                onChange={(v) => updateAppearance({ borderWidth: v })}
               />
             </Box>
           </Paper>
@@ -379,7 +405,7 @@ export default function I3Tab() {
       <DiffDialog
         open={diffOpen}
         path={path}
-        diff={diffLines(original, serialized)}
+        diff={diffOpen ? diffLines(original, serialized) : null}
         onCancel={() => setDiffOpen(false)}
         onConfirm={confirmApply}
         busy={busy}
@@ -426,7 +452,7 @@ function KeybindRow(props: {
           size="small"
           checked={bind.enabled}
           onChange={(e) => onChange(bind.id, { enabled: e.target.checked })}
-          inputProps={{ "aria-label": `Enable bind ${bind.keys}` }}
+          slotProps={{ input: { "aria-label": `Enable bind ${bind.keys}` } }}
         />
       </TableCell>
       <TableCell>
@@ -444,10 +470,11 @@ function KeybindRow(props: {
           }}
         />
       </TableCell>
-      <TableCell>
+      <TableCell sx={{ width: "45%" }}>
         <TextField
           value={bind.command}
           onChange={(e) => onChange(bind.id, { command: e.target.value })}
+          fullWidth
           sx={{ minWidth: 240 }}
           slotProps={{
             htmlInput: {
@@ -497,7 +524,7 @@ function StartupRow(props: {
           size="small"
           checked={entry.enabled}
           onChange={(e) => onChange(entry.id, { enabled: e.target.checked })}
-          inputProps={{ "aria-label": `Enable startup app ${entry.command}` }}
+          slotProps={{ input: { "aria-label": `Enable startup app ${entry.command}` } }}
         />
       </TableCell>
       <TableCell>
@@ -513,10 +540,11 @@ function StartupRow(props: {
           <MenuItem value="exec_always">exec_always</MenuItem>
         </TextField>
       </TableCell>
-      <TableCell>
+      <TableCell sx={{ width: "45%" }}>
         <TextField
           value={entry.command}
           onChange={(e) => onChange(entry.id, { command: e.target.value })}
+          fullWidth
           sx={{ minWidth: 220 }}
           slotProps={{
             htmlInput: {

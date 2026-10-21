@@ -6,6 +6,7 @@ import { Box, FormControlLabel, MenuItem, Paper, Switch, TextField } from "@mui/
 import StagedTabShell, { SectionTitle } from "./StagedTabShell";
 import { useStagedConfig } from "../lib/useStagedConfig";
 import * as picom from "../adapters/picom";
+import NumberField from "./NumberField";
 
 type File = { ini: picom.IniFile; model: picom.PicomModel };
 
@@ -73,7 +74,7 @@ export default function PicomTab() {
                 size="small"
                 checked={s.vsync}
                 onChange={(e) => update({ vsync: e.target.checked })}
-                inputProps={{ "aria-label": "vsync" }}
+                slotProps={{ input: { "aria-label": "vsync" } }}
               />
             }
             label="vsync"
@@ -84,7 +85,7 @@ export default function PicomTab() {
                 size="small"
                 checked={s.detectRoundedCorners}
                 onChange={(e) => update({ detectRoundedCorners: e.target.checked })}
-                inputProps={{ "aria-label": "detect rounded corners" }}
+                slotProps={{ input: { "aria-label": "detect rounded corners" } }}
               />
             }
             label="detect-rounded-corners"
@@ -95,7 +96,7 @@ export default function PicomTab() {
                 size="small"
                 checked={s.glxNoStencil}
                 onChange={(e) => update({ glxNoStencil: e.target.checked })}
-                inputProps={{ "aria-label": "glx-no-stencil" }}
+                slotProps={{ input: { "aria-label": "glx-no-stencil" } }}
               />
             }
             label="glx-no-stencil"
@@ -112,45 +113,41 @@ export default function PicomTab() {
                 size="small"
                 checked={s.shadow}
                 onChange={(e) => update({ shadow: e.target.checked })}
-                inputProps={{ "aria-label": "shadows" }}
+                slotProps={{ input: { "aria-label": "shadows" } }}
               />
             }
             label="Enabled"
           />
-          <TextField
+          <NumberField
             label="Radius (px)"
-            type="number"
             value={s.shadowRadius}
-            onChange={(e) => update({ shadowRadius: Number(e.target.value) })}
+            onChange={(v) => update({ shadowRadius: v })}
             sx={{ minWidth: 120 }}
           />
-          <TextField
+          <NumberField
             label="Offset X"
-            type="number"
             value={s.shadowOffsets[0]}
-            onChange={(e) =>
+            onChange={(v) =>
               update({
-                shadowOffsets: [Number(e.target.value), s.shadowOffsets[1]],
+                shadowOffsets: [v, s.shadowOffsets[1]],
               })
             }
             sx={{ minWidth: 110 }}
           />
-          <TextField
+          <NumberField
             label="Offset Y"
-            type="number"
-        value={s.shadowOffsets[1]}
-            onChange={(e) =>
+            value={s.shadowOffsets[1]}
+            onChange={(v) =>
               update({
-                shadowOffsets: [s.shadowOffsets[0], Number(e.target.value)],
+                shadowOffsets: [s.shadowOffsets[0], v],
               })
             }
             sx={{ minWidth: 110 }}
           />
-          <TextField
+          <NumberField
             label="Opacity (0 to 1)"
-            type="number"
             value={s.shadowOpacity}
-            onChange={(e) => update({ shadowOpacity: Number(e.target.value) })}
+            onChange={(v) => update({ shadowOpacity: v })}
             sx={{ minWidth: 150 }}
           />
         </Box>
@@ -165,23 +162,21 @@ export default function PicomTab() {
                 size="small"
                 checked={s.fading}
                 onChange={(e) => update({ fading: e.target.checked })}
-                inputProps={{ "aria-label": "fading" }}
+                slotProps={{ input: { "aria-label": "fading" } }}
               />
             }
             label="Enabled"
           />
-          <TextField
+          <NumberField
             label="Corner radius (px)"
-            type="number"
             value={s.cornerRadius}
-            onChange={(e) => update({ cornerRadius: Number(e.target.value) })}
+            onChange={(v) => update({ cornerRadius: v })}
             sx={{ minWidth: 150 }}
           />
-          <TextField
+          <NumberField
             label="Fade delta (ms)"
-            type="number"
             value={s.fadeDelta}
-            onChange={(e) => update({ fadeDelta: Number(e.target.value) })}
+            onChange={(v) => update({ fadeDelta: v })}
             sx={{ minWidth: 140 }}
           />
           <TextField

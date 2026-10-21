@@ -4,6 +4,18 @@
 export interface RasiProperty {
   name: string;
   value: string;
+  /** Quote char the original value carried; re-applied on rewrite. */
+  quote?: '"' | "'";
+  /** Line index inside the file; undefined for UI-added properties. */
+  lineIndex?: number;
+  /** Indent of the original line, preserved when regenerating. */
+  indent: number;
+  /** Parsed original value; a line is rewritten only when it changed. */
+  origValue: string;
+  /** Parsed original name; renaming rewrites the line. */
+  origName?: string;
+  /** UI removal marker; serialize deletes the line. */
+  removed?: boolean;
 }
 
 export interface RasiFile {
@@ -60,7 +72,27 @@ export function parseRasi(raw: string): RasiFile {
     if (t.startsWith("@")) continue; // directives are preserved as-is via lines
     const m = PROP_RE.exec(t);
     if (!m) throw new Error(`Unparseable line inside configuration block: "${t}"`);
-    properties.push({ name: m[1], value: m[2].replace(/;$/, "").trim() });
+    let value = m[2].replace(/;$/, "").trim();
+    // Values are written quoted in rasi: `font: "JetBrains Mono 10";`.
+    // Strip quotes on parse so the UI shows and edits the bare value,
+    // then re-apply on rewrite.
+    let quote: '"' | "'" | undefined;
+    if (value.startsWith('"') && value.endsWith('"') && value.length >= 2) {
+      quote = '"';
+      value = value.slice(1, -1);
+    } else if (value.startsWith("'") && value.endsWith("'") && value.length >= 2) {
+      quote = "'";
+      value = value.slice(1, -1);
+    }
+    properties.push({
+      name: m[1],
+      value,
+      quote,
+      lineIndex: i,
+      indent: lines[i].length - lines[i].trimStart().length,
+      origValue: value,
+      origName: m[1],
+    });
   }
 
   return { raw, lines, properties, configStart, configEnd };
@@ -68,9 +100,35 @@ export function parseRasi(raw: string): RasiFile {
 
 export function serializeRasi(file: RasiFile): string {
   const lines = [...file.lines];
-  const body = file.properties.map((p) => `    ${p.name}: ${p.value};`);
-  const replacement = ["configuration {", ...body, "}"];
-  lines.splice(file.configStart, file.configEnd - file.configStart + 1, ...replacement);
+  const kept = file.properties.filter((p) => !p.removed);
+
+  for (const p of kept) {
+    if (p.lineIndex === undefined) continue;
+    const changed = p.value !== p.origValue || p.name !== p.origName;
+    if (!changed) continue; // untouched property lines survive byte-for-byte
+    const v = p.quote ? `${p.quote}${p.value}${p.quote}` : p.value;
+    lines[p.lineIndex] = `${" ".repeat(p.indent)}${p.name}: ${v};`;
+  }
+  // UI-added properties append just before the closing brace.
+  const added = kept.filter((p) => p.lineIndex === undefined);
+  if (added.length > 0) {
+    const insertAt = file.configEnd;
+    const rendered = added.map((p) => `    ${p.name}: ${p.quote ? `${p.quote}${p.value}${p.quote}` : p.value};`);
+    lines.splice(insertAt, 0, ...rendered);
+  }
+  // Removed properties: blank their original line, then strip trailing
+  // blank lines inside the block so the close brace does not drift up.
+  for (const p of file.properties) {
+    if (p.removed && p.lineIndex !== undefined) {
+      lines[p.lineIndex] = "";
+    }
+  }
+  if (file.properties.some((p) => p.removed && p.lineIndex !== undefined)) {
+    for (let i = file.configEnd - 1; i > file.configStart; i--) {
+      if (lines[i].trim() === "") lines.splice(i, 1);
+      else break;
+    }
+  }
   return lines.join("\n");
 }
 
@@ -83,7 +141,9 @@ export interface RofiSettings {
 }
 
 export function toSettings(file: RasiFile): RofiSettings {
-  const get = (n: string) => file.properties.find((p) => p.name === n)?.value ?? null;
+  const get = (n: string) =>
+    file.properties.find((p) => !p.removed && (p.name === n || p.origName === n))
+      ?.value ?? null;
   return {
     modi: get("modi") ?? "window,run,ssh,drun",
     font: get("font") ?? "JetBrains Mono 10",
@@ -103,9 +163,26 @@ export function applySettings(file: RasiFile, s: RofiSettings): RasiFile {
   ];
   const props = [...file.properties];
   for (const [name, value] of wanted) {
-    const idx = props.findIndex((p) => p.name === name);
-    if (idx >= 0) props[idx] = { ...props[idx], value };
-    else props.push({ name, value });
+    const idx = props.findIndex(
+      (p) => p.name === name || p.origName === name
+    );
+    if (idx >= 0) {
+      if (props[idx].removed) {
+        // The user removed the property row: keep it removed rather than
+        // resurrecting it from the typed fields.
+        continue;
+      }
+      props[idx] = { ...props[idx], value };
+    } else
+      props.push({
+        name,
+        value,
+        quote: '"',
+        lineIndex: undefined,
+        indent: 4,
+        origValue: value,
+        origName: name,
+      });
   }
   return { ...file, properties: props };
 }

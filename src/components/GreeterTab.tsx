@@ -6,6 +6,7 @@ import { Box, FormControlLabel, Paper, Switch, TextField } from "@mui/material";
 import StagedTabShell, { SectionTitle } from "./StagedTabShell";
 import { useStagedConfig } from "../lib/useStagedConfig";
 import * as greeter from "../adapters/greeter";
+import NumberField from "./NumberField";
 
 type File = { ini: greeter.IniFile; model: greeter.GreeterModel };
 
@@ -102,7 +103,7 @@ export default function GreeterTab() {
                 size="small"
                 checked={s.userBackground}
                 onChange={(e) => update({ userBackground: e.target.checked })}
-                inputProps={{ "aria-label": "Use user background" }}
+                slotProps={{ input: { "aria-label": "Use user background" } }}
               />
             }
             label="User background"
@@ -116,11 +117,10 @@ export default function GreeterTab() {
               htmlInput: { style: { fontFamily: '"JetBrains Mono", monospace' } },
             }}
           />
-          <TextField
+          <NumberField
             label="Screensaver timeout (min)"
-            type="number"
             value={s.screensaverTimeout}
-            onChange={(e) => update({ screensaverTimeout: Number(e.target.value) })}
+            onChange={(v) => update({ screensaverTimeout: v })}
             sx={{ minWidth: 200 }}
           />
         </Box>

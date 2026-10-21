@@ -12,6 +12,7 @@ use std::process::Command;
 use std::time::SystemTime;
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FileMeta {
     pub path: String,
     pub format: String,
@@ -21,13 +22,19 @@ pub struct FileMeta {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WriteResult {
     pub ok: bool,
     pub backup_path: Option<String>,
     pub error: Option<String>,
+    /// mtime of the file after the atomic write, so the watcher can
+    /// rebaseline immediately and never mistake our own write for an
+    /// external change.
+    pub written_mtime: Option<String>,
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ApplyResult {
     pub ok: bool,
     pub message: String,
@@ -56,25 +63,28 @@ fn backup_dir() -> PathBuf {
     base
 }
 
-/// `20261015-162200` style stamp from the wall clock.
+/// `20261015-162200-123` style stamp from the wall clock, with
+/// milliseconds so two writes in the same second cannot collide.
 fn timestamp() -> String {
     let now = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap_or_default();
     let secs = now.as_secs() as i64;
+    let millis = now.subsec_millis();
     // Civil-time conversion (days -> y/m/d) without pulling in a full
     // chrono dependency for this one function.
     let days = secs.div_euclid(86400);
     let secs_of_day = secs.rem_euclid(86400);
     let (y, m, d) = civil_from_days(days);
     format!(
-        "{:04}{:02}{:02}-{:02}{:02}{:02}",
+        "{:04}{:02}{:02}-{:02}{:02}{:02}-{:03}",
         y,
         m,
         d,
         secs_of_day / 3600,
         (secs_of_day % 3600) / 60,
-        secs_of_day % 60
+        secs_of_day % 60,
+        millis
     )
 }
 
@@ -159,12 +169,52 @@ fn read_config(path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-fn write_config(path: String, content: String, _format: String) -> Result<WriteResult, String> {
+fn write_config(
+    path: String,
+    content: String,
+    _format: String,
+    expected_mtime: Option<String>,
+) -> Result<WriteResult, String> {
     let p = expand_tilde(&path);
     let parent = p
         .parent()
         .ok_or_else(|| "invalid path: no parent directory".to_string())?;
     fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+
+    // Refuse the write when the file changed on disk since it was loaded.
+    // This closes the TOCTOU gap: the staged diff was computed against
+    // the state the user saw, and clobbering an external edit silently
+    // would defeat the whole backup pipeline.
+    if let Some(expected) = expected_mtime {
+        let current = fs::metadata(&p)
+            .ok()
+            .and_then(|md| md.modified().ok())
+            .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
+            .map(|d| format_rfc3339(d.as_secs() as i64));
+        match current {
+            Some(actual) if actual != expected => {
+                return Err(format!(
+                    "changed on disk: file was modified at {}, but the staged edit was based on {} ({}). Reload the tab and re-apply.",
+                    actual,
+                    expected,
+                    p.display()
+                ));
+            }
+            None => {
+                return Err(format!(
+                    "changed on disk: file no longer exists ({}). Reload the tab and re-apply.",
+                    p.display()
+                ));
+            }
+            _ => {}
+        }
+    }
+
+    // Preserve the execute bit (the lock script lives in /usr/local/bin).
+    let mode = fs::metadata(&p).ok().map(|md| {
+        use std::os::unix::fs::PermissionsExt;
+        md.permissions().mode()
+    });
 
     // 1. Backup: copy the existing file, if any.
     let mut backup_path: Option<String> = None;
@@ -179,8 +229,15 @@ fn write_config(path: String, content: String, _format: String) -> Result<WriteR
     }
 
     // 2. Atomic write: temp file in the same directory, then rename.
+    // PID + atomic counter keep the temp name unique so two concurrent
+    // writes to the same target can never share a temp file.
     let file_name = p.file_name().and_then(|n| n.to_str()).unwrap_or("config");
-    let tmp = parent.join(format!(".{}.heffs-tmp", file_name));
+    static TMP_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let seq = TMP_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let tmp = parent.join(format!(
+        ".{}.{}.{}-heffs-tmp",
+        file_name, std::process::id(), seq
+    ));
     {
         let mut f = fs::File::create(&tmp).map_err(|e| e.to_string())?;
         f.write_all(content.as_bytes())
@@ -190,15 +247,42 @@ fn write_config(path: String, content: String, _format: String) -> Result<WriteR
                 e.to_string()
             })?;
     }
-    fs::rename(&tmp, &p).map_err(|e| {
+    // Resolve symlinks BEFORE renaming over the path: dotfile-managed
+    // configs (stow, symlinks to a repo) must have their target file
+    // replaced, not the symlink itself.
+    let dest = match fs::read_link(&p) {
+        Ok(target) if target.is_absolute() => target,
+        Ok(target) => parent.join(target),
+        Err(_) => p.clone(),
+    };
+    fs::rename(&tmp, &dest).map_err(|e| {
         let _ = fs::remove_file(&tmp);
         e.to_string()
     })?;
+    if let Some(mode) = mode {
+        use std::os::unix::fs::PermissionsExt;
+        if let Err(e) = fs::set_permissions(&dest, fs::Permissions::from_mode(mode)) {
+            // A lock script that loses its execute bit breaks the lock
+            // screen; never let this fail silently.
+            return Err(format!(
+                "written, but restoring permissions on {} failed: {}",
+                dest.display(),
+                e
+            ));
+        }
+    }
+
+    let written_mtime = fs::metadata(&p)
+        .ok()
+        .and_then(|md| md.modified().ok())
+        .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
+        .map(|d| format_rfc3339(d.as_secs() as i64));
 
     Ok(WriteResult {
         ok: true,
         backup_path,
         error: None,
+        written_mtime,
     })
 }
 
@@ -207,8 +291,8 @@ fn apply_tool(target: String, _path: String) -> Result<ApplyResult, String> {
     let (program, args) = match target.as_str() {
         "i3" => ("i3-msg", vec!["reload"]),
         "polybar" => ("polybar-msg", vec!["cmd", "restart"]),
-        "dunst" => ("dunstify", vec!["-C"]), // clear notifications so the new theme shows
-        "picom" => ("picom-msg", vec!["--restart"]), // if present; else fail soft
+        "dunst" => ("dunstctl", vec!["reload"]), // reload config; falls through if missing
+        "picom" => ("killall", vec!["-SIGUSR1", "picom"]), // picom's documented reload signal
         _ => {
             return Ok(ApplyResult {
                 ok: true,
@@ -219,20 +303,38 @@ fn apply_tool(target: String, _path: String) -> Result<ApplyResult, String> {
         }
     };
 
-    let display = Command::new(program)
-        .args(&args)
-        .output()
-        .map_err(|e| e.to_string())?;
+    let out = Command::new(program).args(&args).output();
+    let out = match out {
+        Ok(o) => o,
+        // Tool not installed: report a soft success with a clear message
+        // instead of an error. The write already succeeded; only the live
+        // reload needs the user's attention.
+        Err(e) => {
+            return Ok(ApplyResult {
+                ok: true,
+                message: format!(
+                    "{} written. Reload command {} is not available ({}); changes take effect next start.",
+                    target, program, e
+                ),
+                command_run: None,
+                command_output: None,
+            });
+        }
+    };
 
     Ok(ApplyResult {
-        ok: display.status.success(),
-        message: if display.status.success() {
+        ok: out.status.success(),
+        message: if out.status.success() {
             format!("{} applied ({} {}).", target, program, args.join(" "))
         } else {
-            format!("{} failed to apply.", target)
+            format!(
+                "{} failed to apply: {}",
+                target,
+                String::from_utf8_lossy(&out.stderr).trim()
+            )
         },
         command_run: Some(format!("{} {}", program, args.join(" "))),
-        command_output: Some(String::from_utf8_lossy(&display.stdout).into_owned()),
+        command_output: Some(String::from_utf8_lossy(&out.stdout).into_owned()),
     })
 }
 

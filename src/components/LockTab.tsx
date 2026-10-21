@@ -4,6 +4,7 @@
 
 import { useCallback } from "react";
 import { Box, Paper, TextField, Typography } from "@mui/material";
+import NumberField from "./NumberField";
 import StagedTabShell, { SectionTitle } from "./StagedTabShell";
 import { useStagedConfig } from "../lib/useStagedConfig";
 import {
@@ -104,11 +105,11 @@ export default function LockTab() {
               htmlInput: { style: { fontFamily: '"JetBrains Mono", monospace' } },
             }}
           />
-          <TextField
+          <NumberField
             label="Timeout (s, 0 = off)"
-            type="number"
             value={s.timeout}
-            onChange={(e) => update({ timeout: Number(e.target.value) })}
+            min={0}
+            onChange={(v) => update({ timeout: v })}
             sx={{ minWidth: 160 }}
           />
         </Box>
@@ -144,7 +145,9 @@ export default function LockTab() {
               bgcolor: () => {
                 // Ring colour doubles as the backdrop wash.
                 const hex = s.ringColor.replace("#", "");
-                const rgb = hex.length >= 6 ? hex.slice(0, 6) : "161B21";
+                // Fallback mirrors the theme charcoal base token so the
+                // preview backdrop matches the app when unset.
+                const rgb = hex.length >= 6 ? hex.slice(0, 6) : "14171B";
                 return `#${rgb}`;
               },
             }}

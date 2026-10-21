@@ -7,6 +7,7 @@ import StagedTabShell, { SectionTitle } from "./StagedTabShell";
 import { useStagedConfig } from "../lib/useStagedConfig";
 import * as dunst from "../adapters/dunst";
 import { ColorField } from "./PolybarTab";
+import NumberField from "./NumberField";
 
 type File = { ini: dunst.IniFile; model: dunst.DunstModel };
 
@@ -69,25 +70,22 @@ export default function DunstTab() {
             value={s.frameColor}
             onChange={(v) => update({ frameColor: v })}
           />
-          <TextField
+          <NumberField
             label="Corner radius (px)"
-            type="number"
             value={s.cornerRadius}
-            onChange={(e) => update({ cornerRadius: Number(e.target.value) })}
+            onChange={(v) => update({ cornerRadius: v })}
             sx={{ minWidth: 150 }}
           />
-          <TextField
+          <NumberField
             label="Transparency (%)"
-            type="number"
             value={s.transparency}
-            onChange={(e) => update({ transparency: Number(e.target.value) })}
+            onChange={(v) => update({ transparency: v })}
             sx={{ minWidth: 150 }}
           />
-          <TextField
+          <NumberField
             label="Frame width (px)"
-            type="number"
             value={s.frameWidth}
-            onChange={(e) => update({ frameWidth: Number(e.target.value) })}
+            onChange={(v) => update({ frameWidth: v })}
             sx={{ minWidth: 150 }}
           />
         </Box>
@@ -96,18 +94,16 @@ export default function DunstTab() {
       <Paper sx={{ p: 2 }}>
         <SectionTitle title="Geometry" />
         <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1.5 }}>
-          <TextField
+          <NumberField
             label="Width (px)"
-            type="number"
             value={s.width}
-            onChange={(e) => update({ width: Number(e.target.value) })}
+            onChange={(v) => update({ width: v })}
             sx={{ minWidth: 120 }}
           />
-          <TextField
+          <NumberField
             label="Height (px)"
-            type="number"
             value={s.height}
-            onChange={(e) => update({ height: Number(e.target.value) })}
+            onChange={(v) => update({ height: v })}
             sx={{ minWidth: 120 }}
           />
           <TextField
@@ -128,11 +124,10 @@ export default function DunstTab() {
               htmlInput: { style: { fontFamily: '"JetBrains Mono", monospace' } },
             }}
           />
-          <TextField
+          <NumberField
             label="Gap size (px)"
-            type="number"
             value={s.gapSize}
-            onChange={(e) => update({ gapSize: Number(e.target.value) })}
+            onChange={(v) => update({ gapSize: v })}
             sx={{ minWidth: 130 }}
           />
         </Box>
@@ -141,11 +136,10 @@ export default function DunstTab() {
       <Paper sx={{ p: 2 }}>
         <SectionTitle title="Timing" />
         <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1.5 }}>
-          <TextField
+          <NumberField
             label="Timeout (ms)"
-            type="number"
             value={s.timeout}
-            onChange={(e) => update({ timeout: Number(e.target.value) })}
+            onChange={(v) => update({ timeout: v })}
             sx={{ minWidth: 150 }}
           />
         </Box>

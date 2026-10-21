@@ -67,13 +67,13 @@ export function parseI3(text: string): I3File {
       const kindWord = execMatch[2] as "exec" | "exec_always";
       // Strip the leading separator that separates keyword from command.
       let command = execMatch[3].replace(/^[ \t]+/, "");
+      const noStartupId = /^--no-startup-id\b/.test(command);
       command = command.replace(/^--no-startup-id\s+/, "").trim();
-      // Note: --no-startup-id flag is dropped from the parsed command;
-      // when re-enabled it is restored on serialize (see serializeI3).
       // note read from preceding comment line, if present
-      const note = lines[i - 1]?.trim().startsWith("# note:")
-        ? lines[i - 1].trim().replace(/^#\s*note:\s*/, "")
-        : "";
+      const noteLine = lines[i - 1]?.trim().startsWith("# note:")
+        ? lines[i - 1].trim()
+        : null;
+      const note = noteLine ? noteLine.replace(/^#\s*note:\s*/, "") : "";
       startup.push({
         id: nextId(),
         kind: kindWord,
@@ -82,6 +82,8 @@ export function parseI3(text: string): I3File {
         enabled,
         raw: line,
         lineIndex: i,
+        noteLineIndex: noteLine ? i - 1 : undefined,
+        noStartupId,
       });
       return;
     }
@@ -202,15 +204,31 @@ export function serializeI3(file: I3File): string {
     if (b.lineIndex === undefined) continue;
     const keyword = b.keys.match(/^\d+$/) ? "bindcode" : "bindsym";
     const ind = indentOf(b.lineIndex);
-    replaceAt.set(
-      b.lineIndex,
-      b.enabled ? ind + renderBind(b, keyword) : `${ind}# ${renderBind(b, keyword)}`
-    );
+    const rendered = b.enabled
+      ? ind + renderBind(b, keyword)
+      : `${ind}# ${renderBind(b, keyword)}`;
+    // Untouched lines are never rewritten: byte-for-byte preservation
+    // even when the raw line's spacing differs from our render style.
+    if (rendered !== lines[b.lineIndex]) replaceAt.set(b.lineIndex, rendered);
   }
   for (const e of startup) {
     if (e.lineIndex === undefined) continue;
     const ind = indentOf(e.lineIndex);
-    replaceAt.set(e.lineIndex, e.enabled ? ind + renderExec(e) : `${ind}# ${renderExec(e)}`);
+    const rendered = e.enabled
+      ? ind + renderExec(e)
+      : `${ind}# ${renderExec(e)}`;
+    if (rendered !== lines[e.lineIndex]) replaceAt.set(e.lineIndex, rendered);
+    // Note persistence: rewrite the "# note:" line above an edited exec.
+    const noteRendered = e.note.trim() ? `${ind}# note: ${e.note.trim()}` : null;
+    if (e.noteLineIndex !== undefined) {
+      if (noteRendered) replaceAt.set(e.noteLineIndex, noteRendered);
+      // An emptied note leaves the old line in place; blanking a comment
+      // line is safe (it stays a comment) and keeps indices stable.
+      else replaceAt.set(e.noteLineIndex, `${ind}#`);
+    } else if (noteRendered) {
+      // Note added via the UI to an existing entry: insert directly above.
+      replaceAt.set(-1 - e.lineIndex, noteRendered); // sentinel handled below
+    }
   }
 
   // Appearance directives.
@@ -229,21 +247,76 @@ export function serializeI3(file: I3File): string {
     else lines.push(rendered);
   }
 
-  // Apply bind/exec replacements.
+  // Apply bind/exec replacements. IN-PLACE replacements run FIRST while
+  // the original line indices are still valid; note insertions (negative
+  // sentinels) then splice in bottom-up so no insertion shifts another
+  // entry's target. (Inserts first would write replacements one line off
+  // for every entry below an inserted note line.)
+  const noteInserts: Array<[number, string]> = [];
   for (const [idx, rendered] of replaceAt) {
-    if (idx < lines.length) lines[idx] = rendered;
+    if (idx < 0) noteInserts.push([-1 - idx, rendered]);
+  }
+  // In-place replacements: original indices, guaranteed in range.
+  for (const [idx, rendered] of replaceAt) {
+    if (idx >= 0) lines[idx] = rendered;
+  }
+  // Then insertions, from the highest index down.
+  noteInserts.sort((a, b) => b[0] - a[0]);
+  for (const [idx, rendered] of noteInserts) {
+    lines.splice(idx, 0, rendered);
   }
 
-  // New binds with no lineIndex (added in the UI) append at end.
+  // New binds with no lineIndex (added in the UI) go INSIDE their mode
+  // block, just before its closing brace; main-mode binds append at EOF.
+  const modeClose = new Map<string, number>();
+  {
+    const stack: string[] = ["main"];
+    for (let i = 0; i < lines.length; i++) {
+      const t = lines[i].trim();
+      const m = t.match(/^mode\s+"([^"]+)"\s*\{/);
+      if (m) {
+        stack.push(m[1]);
+        continue;
+      }
+      if (t.startsWith("}") && stack.length > 1) {
+        modeClose.set(stack.pop()!, i);
+      }
+    }
+  }
+
+  // Group new binds by mode, in model order, then insert each group just
+  // before the closing brace of its mode block. Insert from the highest
+  // line index down so earlier insertions do not shift later ones.
+  const byMode = new Map<string, I3Keybind[]>();
   for (const b of keybinds) {
     if (b.lineIndex === undefined) {
+      if (!byMode.has(b.mode)) byMode.set(b.mode, []);
+      byMode.get(b.mode)!.push(b);
+    }
+  }
+  const inserts: Array<[number, string[]]> = [];
+  for (const [mode, binds] of byMode) {
+    if (mode === "main" || !modeClose.has(mode)) continue;
+    const rendered = binds.map((b) => {
       const keyword = b.keys.match(/^\d+$/) ? "bindcode" : "bindsym";
-      lines.push(b.enabled ? renderBind(b, keyword) : `# ${renderBind(b, keyword)}`);
+      return `    ${b.enabled ? "" : "# "}${renderBind(b, keyword)}`;
+    });
+    inserts.push([modeClose.get(mode)!, rendered]);
   }
+  inserts.sort((a, b) => b[0] - a[0]);
+  for (const [idx, rendered] of inserts) {
+    lines.splice(idx, 0, ...rendered);
   }
-  // New execs with no lineIndex append at end.
+
+  // Main-mode new binds and all new execs append at end of file.
+  for (const b of byMode.get("main") ?? []) {
+    const keyword = b.keys.match(/^\d+$/) ? "bindcode" : "bindsym";
+    lines.push(b.enabled ? renderBind(b, keyword) : `# ${renderBind(b, keyword)}`);
+  }
   for (const e of startup) {
     if (e.lineIndex === undefined) {
+      // A note on a UI-added startup entry rides above the exec line.
+      if (e.note.trim()) lines.push(`# note: ${e.note}`);
       lines.push(e.enabled ? renderExec(e) : `# ${renderExec(e)}`);
     }
   }
@@ -256,8 +329,7 @@ function renderBind(b: I3Keybind, keyword: string): string {
 }
 
 function renderExec(e: I3StartupApp): string {
-  // --no-startup-id restored only when the original had it.
-  const flag = e.raw.includes("--no-startup-id") ? "--no-startup-id " : "";
+  const flag = e.noStartupId ? "--no-startup-id " : "";
   return `${e.kind} ${flag}${e.command}`;
 };
 

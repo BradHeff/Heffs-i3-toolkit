@@ -3,6 +3,7 @@
 
 import { Dialog, DialogContent, DialogTitle, Box, Typography, Button } from "@mui/material";
 import type { DiffLine } from "../lib/diff";
+import { diffTints } from "../theme";
 
 const KIND_COLOR: Record<DiffLine["kind"], string> = {
   same: "inherit",
@@ -14,6 +15,12 @@ const KIND_PREFIX: Record<DiffLine["kind"], string> = {
   same: "  ",
   add: "+ ",
   del: "- ",
+};
+
+const KIND_TINT: Record<DiffLine["kind"], string> = {
+  same: "transparent",
+  add: diffTints.add,
+  del: diffTints.del,
 };
 
 export interface DiffDialogProps {
@@ -62,12 +69,7 @@ export default function DiffDialog(props: DiffDialogProps) {
                   sx={{
                     display: "block",
                     color: KIND_COLOR[d.kind],
-                    bgcolor:
-                      d.kind === "add"
-                        ? "rgba(53, 203, 180, 0.08)"
-                        : d.kind === "del"
-                          ? "rgba(229, 83, 75, 0.08)"
-                        : "transparent",
+                    bgcolor: KIND_TINT[d.kind],
                   }}
                 >
                   {KIND_PREFIX[d.kind]}

@@ -79,6 +79,12 @@ export default function StagedTabShell(props: StagedTabShellProps) {
         path={api.path}
         onPathChange={api.setPath}
         refreshKey={api.refreshKey}
+        writtenMtime={api.writtenMtime}
+        onExternalChange={
+          api.dirty
+            ? undefined // do not clobber staged edits; the warning chip shows
+            : api.reload
+        }
       />
 
       <Box
@@ -139,7 +145,11 @@ export default function StagedTabShell(props: StagedTabShellProps) {
       <DiffDialog
         open={api.diffOpen}
         path={api.path}
-        diff={diffLines(api.original, api.serialized)}
+        diff={
+          api.diffOpen
+            ? diffLines(api.original, api.serialized)
+            : null
+        }
         onCancel={() => api.setDiffOpen(false)}
         onConfirm={api.confirmApply}
         busy={api.busy}

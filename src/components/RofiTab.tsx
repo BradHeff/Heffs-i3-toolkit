@@ -17,7 +17,6 @@ import {
   TableRow,
   TextField,
   Tooltip,
-  Typography,
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
 import AddIcon from "@mui/icons-material/Add";
@@ -41,7 +40,11 @@ function parse(text: string): File {
 }
 
 function serialize(file: File): string {
-  return serializeRasi(applySettings(file.rasi, file.settings));
+  const next = applySettings(file.rasi, file.settings);
+  // applySettings pushes wanted props with lineIndex undefined when
+  // missing; keep them out of the model so the raw table and typed
+  // fields cannot both own the same new property.
+  return serializeRasi(next);
 }
 
 function validate(file: File): string[] {
@@ -100,7 +103,7 @@ export default function RofiTab() {
                 size="small"
                 checked={s.showIcons}
                 onChange={(e) => update({ showIcons: e.target.checked })}
-                inputProps={{ "aria-label": "Show icons" }}
+                slotProps={{ input: { "aria-label": "Show icons" } }}
               />
             }
             label="Show icons"
@@ -153,12 +156,32 @@ export default function RofiTab() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {api.file.rasi.properties.map((p, i) => (
-                <TableRow key={`${p.name}-${i}`} hover>
+              {api.file.rasi.properties.filter((p) => !p.removed).map((p) => {
+                const i = api.file!.rasi.properties.indexOf(p);
+                return (
+                <TableRow key={`${p.origName ?? p.name}-${i}`} hover>
                   <TableCell>
-                    <Typography variant="body2" sx={{ fontFamily: '"JetBrains Mono", monospace' }}>
-                      {p.name}
-                    </Typography>
+                    <TextField
+                      value={p.name}
+                      onChange={(e) =>
+                        api.setFile(
+                          (f) =>
+                            f && {
+                              rasi: {
+                                ...f.rasi,
+                                properties: f.rasi.properties.map((q, j) =>
+                                  j === i ? { ...q, name: e.target.value } : q
+                                ),
+                              },
+                              settings: f.settings,
+                            }
+                        )
+                      }
+                      slotProps={{
+                        htmlInput: { style: { fontFamily: '"JetBrains Mono", monospace' } },
+                      }}
+                      aria-label={`Property name row ${i + 1}`}
+                    />
                   </TableCell>
                   <TableCell>
                     <TextField
@@ -194,7 +217,12 @@ export default function RofiTab() {
                                 f && {
                                   rasi: {
                                     ...f.rasi,
-                                    properties: f.rasi.properties.filter((_, j) => j !== i),
+                                    // Mark removed rather than dropping the
+                                    // row: lineIndex is what serialize uses
+                                    // to delete the original line.
+                                    properties: f.rasi.properties.map((q, j) =>
+                                      j === i ? { ...q, removed: true } : q
+                                    ),
                                   },
                                   settings: f.settings,
                                 }
@@ -208,7 +236,8 @@ export default function RofiTab() {
                     </Tooltip>
                   </TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
             </TableBody>
           </Table>
         </TableContainer>
@@ -222,7 +251,16 @@ export default function RofiTab() {
         f && {
           rasi: {
             ...f.rasi,
-            properties: [...f.rasi.properties, { name: "new-property", value: "" }],
+            properties: [
+              ...f.rasi.properties,
+              {
+                name: "new-property",
+                value: "",
+                indent: 4,
+                origValue: "",
+                origName: undefined,
+              },
+            ],
           },
           settings: f.settings,
         }

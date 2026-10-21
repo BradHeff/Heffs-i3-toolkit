@@ -1,12 +1,14 @@
 {
   "name": "heffs-i3-toolkit",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "test:adapter": "esbuild --bundle tests/i3-adapter.test.ts --platform=node --format=cjs --outfile=dist-tests.cjs --log-level=error && node dist-tests.cjs && rm -f dist-tests.cjs",
+    "test:adapter": "npm run test:adapter:i3 && npm run test:adapter:rest",
+    "test:adapter:i3": "esbuild --bundle tests/i3-adapter.test.ts --platform=node --format=cjs --outfile=dist-tests-i3.cjs --log-level=error && node dist-tests-i3.cjs && rm -f dist-tests-i3.cjs",
+    "test:adapter:rest": "esbuild --bundle tests/adapters.test.ts --platform=node --format=cjs --outfile=dist-tests-rest.cjs --log-level=error && node dist-tests-rest.cjs && rm -f dist-tests-rest.cjs",
     "preview": "vite preview",
     "tauri": "tauri"
   },

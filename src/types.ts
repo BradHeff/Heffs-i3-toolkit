@@ -21,6 +21,8 @@ export interface WriteResult {
   ok: boolean;
   backupPath: string | null;
   error: string | null;
+  /** mtime of the file after the write, for watcher rebaselining. */
+  writtenMtime: string | null;
 }
 
 // i3 config model -----------------------------------------------------------
@@ -43,6 +45,10 @@ export interface I3StartupApp {
   enabled: boolean;
   raw: string;
   lineIndex?: number; // set by the parser; absent for UI-added entries
+  /** Line index of the "# note:" comment above the exec, when present. */
+  noteLineIndex?: number;
+  /** Whether the invocation carries --no-startup-id. */
+  noStartupId: boolean;
 }
 
 export interface I3Appearance {

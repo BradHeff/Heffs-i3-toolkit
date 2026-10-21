@@ -271,15 +271,26 @@ export async function readConfig(path: string): Promise<string> {
 }
 
 // The safety rail: backup + atomic write, done backend-side.
+// expectedMtime: mtime observed when the tab loaded the file; the
+// backend refuses the write when the file changed on disk since.
 export async function writeConfig(args: {
   path: string;
   content: string;
   format: ConfigFormat;
+  expectedMtime?: string | null;
 }): Promise<WriteResult> {
   if (hasBackend) {
     return tw.__TAURI_INTERNALS__!.invoke<WriteResult>("write_config", args);
   }
   const prev = demoFiles.get(args.path);
+  if (args.expectedMtime && prev && prev.mtime !== args.expectedMtime) {
+    return {
+      ok: false,
+      backupPath: null,
+      error: "changed on disk: file was modified after this tab loaded it. Reload and re-apply.",
+      writtenMtime: null,
+    };
+  }
   const now = new Date().toISOString();
   demoFiles.set(args.path, { content: args.content, mtime: now });
   return {
@@ -288,6 +299,7 @@ export async function writeConfig(args: {
       ? `~/.config/heffs-i3-toolkit/backups/demo-${now.replace(/[:.]/g, "-")}.bak`
       : null,
     error: null,
+    writtenMtime: now,
   };
 }
 
@@ -302,3 +314,7 @@ export async function applyTool(target: string, path: string): Promise<ApplyResu
     commandOutput: null,
   };
 }
+// Keep the fallback object literal in applyTool aligned with ApplyResult:
+// ok, message, commandRun, commandOutput. If ApplyResult gains a field,
+// update both the demo fallback above and the catch handler in
+// useStagedConfig.ts.

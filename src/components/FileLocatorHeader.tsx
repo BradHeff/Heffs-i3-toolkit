@@ -3,7 +3,7 @@
 // and an external-change watcher that warns when the file changed on disk
 // while the tab was open.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Box,
   Checkbox,
@@ -50,6 +50,8 @@ export interface FileLocatorHeaderProps {
   onPathChange: (path: string) => void;
   /** Bump to force a refresh (after a write, for instance). */
   refreshKey: number;
+  /** mtime of the last write made by this app; never treated as external. */
+  writtenMtime?: string | null;
   /** Fired when the watcher detects an external change. */
   onExternalChange?: () => void;
 }
@@ -64,6 +66,7 @@ export default function FileLocatorHeader(props: FileLocatorHeaderProps) {
     path,
     onPathChange,
     refreshKey,
+    writtenMtime,
     onExternalChange,
   } = props;
 
@@ -71,6 +74,10 @@ export default function FileLocatorHeader(props: FileLocatorHeaderProps) {
   const [useCustom, setUseCustom] = useState(false);
   const [customPath, setCustomPath] = useState(defaultPath);
   const [extWarning, setExtWarning] = useState(false);
+  // mtime seen at the last poll: while mounted the watcher rebaselines
+  // on every meta change so the app's own writes (apply -> refreshKey ->
+  // setMeta) never look like external edits.
+  const lastSeenMtime = useRef<string | null>(null);
 
   // Load metadata for the active path.
   const loadMeta = useCallback(async () => {
@@ -96,18 +103,37 @@ export default function FileLocatorHeader(props: FileLocatorHeaderProps) {
   }, [path, refreshKey]);
 
   // External-change watcher: poll the mtime every 5 s while mounted.
+  // Tracks the last mtime it saw (not just the one at effect setup), so
+  // legitimate successive external edits and our own refreshes both
+  // re-baseline instead of firing the warning repeatedly.
   useEffect(() => {
     if (!meta?.exists) return;
-    const baseline = meta.lastModified;
+    if (meta.lastModified !== lastSeenMtime.current) {
+      lastSeenMtime.current = meta.lastModified;
+      // meta changed via loadMeta (refresh or apply): this is a known
+      // write, not an external one, so clear any stale warning.
+      setExtWarning(false);
+    }
+    // Our own write (apply) reports its mtime directly; adopt it before
+    // the 5 s poll can observe it, so the pipeline's own write is never
+    // mistaken for an external change.
+    if (writtenMtime && writtenMtime !== lastSeenMtime.current) {
+      lastSeenMtime.current = writtenMtime;
+      setExtWarning(false);
+    }
+    const knownMtimes = new Set(
+      [lastSeenMtime.current, writtenMtime].filter(Boolean) as string[]
+    );
     const t = setInterval(async () => {
       try {
         const m = await readFileMeta(path);
         if (
           m.exists &&
-          baseline &&
           m.lastModified &&
-          m.lastModified !== baseline
+          !knownMtimes.has(m.lastModified)
         ) {
+          knownMtimes.add(m.lastModified);
+          lastSeenMtime.current = m.lastModified;
           setExtWarning(true);
           onExternalChange?.();
         }
@@ -116,7 +142,7 @@ export default function FileLocatorHeader(props: FileLocatorHeaderProps) {
       }
     }, 5000);
     return () => clearInterval(t);
-  }, [path, meta?.exists, meta?.lastModified, onExternalChange]);
+  }, [path, meta?.exists, meta?.lastModified, writtenMtime, onExternalChange]);
 
   const handleRefresh = useCallback(() => {
     void loadMeta();

@@ -102,15 +102,20 @@ export function validate(model: PolybarModel): string[] {
       errs.push(`${key} must be a #RRGGBB(AA) or rgba() colour.`);
     }
   }
-  const dupes = new Set<string>();
+  // A module may legitimately appear in more than one modules-* list (for
+  // example a thin border/separator module flanking each section), and may
+  // repeat inside a single list. Polybar renders one instance per reference,
+  // so no duplicate check is applied.
   for (const list of [
     model.settings.modulesLeft,
     model.settings.modulesCenter,
     model.settings.modulesRight,
   ]) {
     for (const m of list) {
-      if (dupes.has(m)) errs.push(`Module ${m} appears in more than one slot.`);
-      dupes.add(m);
+      if (m.trim() === "") {
+        errs.push("Module lists must not contain empty entries.");
+        break;
+      }
     }
   }
   return errs;

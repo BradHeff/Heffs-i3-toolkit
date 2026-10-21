@@ -1,6 +1,6 @@
 [package]
 name = "heffs-i3-toolkit"
-version = "0.1.0"
+version = "0.2.0"
 description = "Visual config toolkit for i3, Polybar, i3lock-color, rofi and LightDM"
 authors = ["Brad Heffernan"]
 edition = "2021"

@@ -47,6 +47,14 @@ const ember = {
 
 export const surfaces = charcoal;
 
+// Faint row tints for the diff preview, derived from palette tokens
+// (blue[300] and error.main). Exported here so components never carry
+// raw colour literals.
+export const diffTints = {
+  add: "rgba(127, 180, 232, 0.10)",
+  del: "rgba(229, 83, 75, 0.10)",
+} as const;
+
 const theme = createTheme({
   palette: {
     mode: "dark",

@@ -19,6 +19,7 @@ import {
   Typography,
 } from "@mui/material";
 import StagedTabShell, { SectionTitle } from "./StagedTabShell";
+import NumberField from "./NumberField";
 import { useStagedConfig } from "../lib/useStagedConfig";
 import * as polybar from "../adapters/polybar";
 
@@ -60,23 +61,25 @@ export default function PolybarTab() {
     [api]
   );
 
-  const toggleModule = useCallback(
-    (name: string, enabled: boolean) => {
-      api.setFile(
-        (f) =>
-          f && {
-            ini: f.ini,
-            model: {
-              ...f.model,
-              settings: {
-                ...f.model.settings,
-                modulesLeft: listWith(f.model.settings.modulesLeft, name, enabled),
-                modulesCenter: listWith(f.model.settings.modulesCenter, name, enabled),
-                modulesRight: listWith(f.model.settings.modulesRight, name, enabled),
-              },
-            },
-          }
-      );
+  // A module may occupy several slots at once (e.g. a border module on both
+  // ends), so each slot is toggled independently.
+  const toggleSlot = useCallback(
+    (name: string, slot: "left" | "center" | "right", on: boolean) => {
+      api.setFile((f) => {
+        if (!f) return f;
+        const key =
+          slot === "left" ? "modulesLeft" : slot === "center" ? "modulesCenter" : "modulesRight";
+        const list = f.model.settings[key];
+        const next = on
+          ? list.includes(name)
+            ? list
+            : [...list, name]
+          : list.filter((n) => n !== name);
+        return {
+          ini: f.ini,
+          model: { ...f.model, settings: { ...f.model.settings, [key]: next } },
+        };
+      });
     },
     [api]
   );
@@ -142,11 +145,11 @@ export default function PolybarTab() {
             <MenuItem value="top">top</MenuItem>
             <MenuItem value="bottom">bottom</MenuItem>
           </TextField>
-          <TextField
+          <NumberField
             label="Height (px)"
-            type="number"
             value={s.height}
-            onChange={(e) => updateSettings({ height: Number(e.target.value) })}
+            min={0}
+            onChange={(v) => updateSettings({ height: v })}
             sx={{ minWidth: 110 }}
           />
           <TextField
@@ -197,26 +200,34 @@ export default function PolybarTab() {
                 <TableCell padding="checkbox">On</TableCell>
                 <TableCell>Name</TableCell>
                 <TableCell>Type</TableCell>
-                <TableCell>Slot</TableCell>
+                <TableCell>L / C / R</TableCell>
+                <TableCell>Position</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {file.model.modules.map((m) => {
-                const slot = s.modulesLeft.includes(m.name)
-                  ? "left"
-                  : s.modulesCenter.includes(m.name)
-                    ? "center"
-                    : s.modulesRight.includes(m.name)
-                      ? "right"
-                      : "off";
+                const inLeft = s.modulesLeft.includes(m.name);
+                const inCenter = s.modulesCenter.includes(m.name);
+                const inRight = s.modulesRight.includes(m.name);
                 return (
                   <TableRow key={m.name} hover>
                     <TableCell padding="checkbox">
                       <Switch
                         size="small"
-                        checked={m.enabled}
-                        onChange={(e) => toggleModule(m.name, e.target.checked)}
-                        inputProps={{ "aria-label": `Enable module ${m.name}` }}
+                        checked={inLeft || inCenter || inRight}
+                        onChange={(e) => {
+                          // Master toggle: switching off clears every slot;
+                          // switching on places it in the left list if it
+                          // had none, leaving existing slots untouched.
+                          if (e.target.checked) {
+                            if (!inLeft && !inCenter && !inRight) toggleSlot(m.name, "left", true);
+                          } else {
+                            toggleSlot(m.name, "left", false);
+                            toggleSlot(m.name, "center", false);
+                            toggleSlot(m.name, "right", false);
+                          }
+                        }}
+                        slotProps={{ input: { "aria-label": `Enable module ${m.name}` } }}
                       />
                     </TableCell>
                     <TableCell>
@@ -230,17 +241,39 @@ export default function PolybarTab() {
                       </Typography>
                     </TableCell>
                     <TableCell>
-                      <TextField
-                        select
-                        value={slot}
-                        onChange={(e) => moveModule(m.name, e.target.value)}
-                        sx={{ minWidth: 110 }}
+                      <Box sx={{ display: "flex", gap: 1.5 }}>
+                        {(["left", "center", "right"] as const).map((slot) => {
+                          const on =
+                            slot === "left"
+                              ? inLeft
+                              : slot === "center"
+                                ? inCenter
+                                : inRight;
+                          return (
+                            <Switch
+                              key={slot}
+                              size="small"
+                              checked={on}
+                              onChange={(e) => toggleSlot(m.name, slot, e.target.checked)}
+                              slotProps={{ input: { "aria-label": `Module ${m.name} in ${slot}` } }}
+                            />
+                          );
+                        })}
+                      </Box>
+                    </TableCell>
+                    <TableCell>
+                      <Typography
+                        variant="body2"
+                        sx={{ color: "text.secondary", fontFamily: '"JetBrains Mono", monospace' }}
                       >
-                        <MenuItem value="off">off</MenuItem>
-                        <MenuItem value="left">left</MenuItem>
-                        <MenuItem value="center">center</MenuItem>
-                        <MenuItem value="right">right</MenuItem>
-                      </TextField>
+                        {[
+                          inLeft ? `left:${s.modulesLeft.indexOf(m.name) + 1}` : null,
+                          inCenter ? `center:${s.modulesCenter.indexOf(m.name) + 1}` : null,
+                          inRight ? `right:${s.modulesRight.indexOf(m.name) + 1}` : null,
+                        ]
+                          .filter(Boolean)
+                          .join("  ")}
+                      </Typography>
                     </TableCell>
                   </TableRow>
                 );
@@ -252,30 +285,6 @@ export default function PolybarTab() {
     </StagedTabShell>
   );
 
-  function moveModule(name: string, slot: string) {
-    api.setFile(
-      (f) => {
-        if (!f) return f;
-        const clean = {
-          modulesLeft: f.model.settings.modulesLeft.filter((n) => n !== name),
-          modulesCenter: f.model.settings.modulesCenter.filter((n) => n !== name),
-          modulesRight: f.model.settings.modulesRight.filter((n) => n !== name),
-        };
-        if (slot === "left") clean.modulesLeft.push(name);
-        if (slot === "center") clean.modulesCenter.push(name);
-        if (slot === "right") clean.modulesRight.push(name);
-        return {
-          ini: f.ini,
-          model: { ...f.model, settings: { ...f.model.settings, ...clean } },
-        };
-      }
-    );
-  }
-}
-
-function listWith(list: string[], name: string, enabled: boolean): string[] {
-  if (enabled) return list.includes(name) ? list : [...list, name];
-  return list.filter((n) => n !== name);
 }
 
 export function ColorField(props: {
