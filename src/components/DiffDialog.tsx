@@ -93,7 +93,7 @@ export default function DiffDialog(props: DiffDialogProps) {
           variant="caption"
           sx={{ fontFamily: '"JetBrains Mono", monospace', color: "text.secondary" }}
         >
-          A timestamped backup is written to ~/.config/heffs-i3-toolkit/backups/ first.
+          A timestamped backup is written to ~/.config/vigil-i3-toolkit/backups/ first.
         </Typography>
       </Box>
     </Dialog>

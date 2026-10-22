@@ -1,12 +1,12 @@
 [package]
-name = "heffs-i3-toolkit"
+name = "vigil-i3-toolkit"
 version = "0.2.0"
-description = "Visual config toolkit for i3, Polybar, i3lock-color, rofi and LightDM"
+description = "Visual config toolkit for the VigilOS i3wm build"
 authors = ["Brad Heffernan"]
 edition = "2021"
 
 [lib]
-name = "heffs_i3_toolkit_lib"
+name = "vigil_i3_toolkit_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

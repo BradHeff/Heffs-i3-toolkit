@@ -1,5 +1,5 @@
-// App shell — tab navigation across the config targets. All six config
-// editors now run on the same staged-edit pipeline.
+// App shell. Config editors stay mounted so staged edits survive tab
+// switches. About is a static page.
 
 import React, { useState } from "react";
 import { Box, Tab, Tabs, Typography } from "@mui/material";
@@ -10,6 +10,7 @@ import RofiTab from "./components/RofiTab";
 import DunstTab from "./components/DunstTab";
 import PicomTab from "./components/PicomTab";
 import GreeterTab from "./components/GreeterTab";
+import AboutTab from "./components/AboutTab";
 import { isDemoMode } from "./ipc";
 
 interface TabSpec {
@@ -25,6 +26,7 @@ const TABS: TabSpec[] = [
   { key: "dunst", label: "dunst" },
   { key: "picom", label: "picom" },
   { key: "greeter", label: "Greeter" },
+  { key: "about", label: "About" },
 ];
 
 // Tabs stay mounted (hidden, not unmounted) so staged edits survive
@@ -39,6 +41,7 @@ const TAB_ELEMENTS: Record<string, React.ReactElement> = {
   dunst: <DunstTab />,
   picom: <PicomTab />,
   greeter: <GreeterTab />,
+  about: <AboutTab />,
 };
 
 export default function App() {
@@ -61,12 +64,12 @@ export default function App() {
       >
         <Box
           component="img"
-          src="/heffs-i3-toolkit.svg"
-          alt="Heffs i3 toolkit logo"
+          src="/vigil-i3-toolkit.svg"
+          alt=""
           sx={{ width: 22, height: 22 }}
         />
         <Typography variant="h2" sx={{ fontSize: "1rem" }}>
-          Heffs i3 toolkit
+          Vigil-i3-Toolkit
         </Typography>
         {isDemoMode && (
           <Typography

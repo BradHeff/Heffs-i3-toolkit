@@ -1,8 +1,9 @@
-# Heffs i3 toolkit
+# Vigil-i3-Toolkit
 
 A visual config toolkit for the i3 ecosystem: i3, Polybar, i3lock-color,
-rofi, dunst, picom and the LightDM GTK greeter. Built with Tauri 2 +
-React + MUI.
+rofi, dunst, picom and the LightDM GTK greeter. The original build is
+for the VigilOS i3wm setup. Developed by Brad Heffernan. Built with
+Tauri 2 + React + MUI.
 
 ## Safety rails
 
@@ -10,7 +11,7 @@ Nothing auto-writes. Every change is staged in the app, previewed as a
 unified diff, backed up with a timestamped copy, and then written
 atomically (temp file + rename), so a crash can never truncate a config.
 
-Backups land in `~/.config/heffs-i3-toolkit/backups/`.
+Backups land in `~/.config/vigil-i3-toolkit/backups/`.
 
 Tabs stay mounted while you work, so staged edits survive switching
 between them. External edits to a config file are detected and flagged
@@ -30,6 +31,7 @@ in the header, separately from the app's own writes.
 - **dunst** — notification appearance and urgency behavior.
 - **picom** — compositing controls (shadows, fading, corner radius).
 - **Greeter** — LightDM GTK greeter editor.
+- **About** — developer, original VigilOS i3wm build, and version.
 
 ## Development
 
@@ -67,7 +69,7 @@ polybar, dunst, picom, greeter, rofi and the lock script.
 - `src-tauri/` — Rust backend (commands: file_meta, read_config,
   write_config, apply_tool)
 - `tests/` — adapter verification suites
-- `Heffs-i3-toolkit-Plan.md` — the full product plan and roadmap
+- `Vigil-i3-Toolkit-Plan.md` — the full product plan and roadmap
 
 ## Roadmap status
 

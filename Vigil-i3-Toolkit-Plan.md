@@ -1,4 +1,4 @@
-# Heffs-i3-toolkit — Complete Project Plan
+# Vigil-i3-Toolkit: complete project plan
 
 A precision GUI configuration cockpit for the i3wm / Polybar / rofi / lightdm-gtk-greeter / i3lock-color stack on Fedora Linux.
 
@@ -47,7 +47,7 @@ Nothing ever touches a file without going through this pipeline, in order:
 
 1. **Staged edit** — changes are held in the app model, never written live
 2. **Diff preview** — user sees exactly what will change before applying
-3. **Timestamped backup** — to `~/.config/heffs-i3-toolkit/backups/`
+3. **Timestamped backup** — to `~/.config/vigil-i3-toolkit/backups/`
 4. **Atomic write** — temp file + rename, so a crash can never leave a half-written config
 5. **Apply action** — the tool's own refresh command runs (`i3-msg reload`, `polybar-msg cmd restart`, etc.)
 

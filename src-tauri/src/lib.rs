@@ -1,4 +1,4 @@
-// Heffs i3 toolkit — Tauri 2 backend.
+// Vigil-i3-Toolkit. Tauri 2 backend.
 // Safety-rail write pipeline: backup -> atomic write -> (optional) apply.
 // Nothing in this backend ever writes without making a timestamped backup
 // first, and writes go to a temp file in the same directory followed by a
@@ -57,7 +57,7 @@ fn backup_dir() -> PathBuf {
     let base = dirs::home_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join(".config")
-        .join("heffs-i3-toolkit")
+        .join("vigil-i3-toolkit")
         .join("backups");
     let _ = fs::create_dir_all(&base);
     base
@@ -235,7 +235,7 @@ fn write_config(
     static TMP_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let seq = TMP_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let tmp = parent.join(format!(
-        ".{}.{}.{}-heffs-tmp",
+        ".{}.{}.{}-vigil-tmp",
         file_name, std::process::id(), seq
     ));
     {

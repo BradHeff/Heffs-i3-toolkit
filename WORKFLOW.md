@@ -1,4 +1,4 @@
-# WORKFLOW.md — Heffs-i3-toolkit
+# WORKFLOW.md: Vigil-i3-Toolkit
 
 ## Overview
 Tauri 2 + React 19 + MUI (Vite, TypeScript) GUI cockpit for i3wm / Polybar / rofi /

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Vigil-i3-Toolkit: i3 tiling, one watched pane, ember vigil bar. -->
+  <rect width="64" height="64" rx="8" fill="#171B20"/>
+  <rect x="8" y="8" width="28" height="48" fill="#5AA7E0"/>
+  <rect x="8" y="8" width="28" height="8" fill="#E8A33D"/>
+  <rect x="40" y="8" width="16" height="22" fill="#535B66"/>
+  <rect x="40" y="34" width="16" height="22" fill="#535B66"/>
+</svg>

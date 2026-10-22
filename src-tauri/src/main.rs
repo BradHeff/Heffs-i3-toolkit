@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    heffs_i3_toolkit_lib::run()
+    vigil_i3_toolkit_lib::run()
 }

@@ -16,7 +16,7 @@ export const isDemoMode = !hasBackend;
 
 // Demo corpus: a realistic mid-size i3 config exercising the parser.
 const DEMO_I3 = `# i3 config (v4)
-# managed with Heffs-i3-toolkit
+# managed with Vigil-i3-Toolkit
 
 font pango:JetBrains Mono 9
 
@@ -296,7 +296,7 @@ export async function writeConfig(args: {
   return {
     ok: true,
     backupPath: prev
-      ? `~/.config/heffs-i3-toolkit/backups/demo-${now.replace(/[:.]/g, "-")}.bak`
+      ? `~/.config/vigil-i3-toolkit/backups/demo-${now.replace(/[:.]/g, "-")}.bak`
       : null,
     error: null,
     writtenMtime: now,
